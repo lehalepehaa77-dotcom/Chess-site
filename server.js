@@ -8,6 +8,22 @@ app.use(express.static('public'));
 const server = http.createServer(app);
 const io = new Server(server);
 const rooms = new Map();
+const queue = [];
+
+function removeFromQueue(socket) {
+  const i = queue.findIndex((q) => q.socket === socket);
+  if (i !== -1) queue.splice(i, 1);
+}
+
+function newRoomId() {
+  const a = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let s;
+  do {
+    s = '';
+    for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)];
+  } while (rooms.has(s));
+  return s;
+}
 
 function getRoom(id) {
   if (!rooms.has(id)) {
@@ -49,6 +65,30 @@ function broadcast(roomId) {
 }
 
 io.on('connection', (socket) => {
+  io.emit('online', io.engine.clientsCount);
+
+  socket.on('find', ({ pid } = {}) => {
+    pid = String(pid || '').slice(0, 64);
+    if (!pid) return;
+    removeFromQueue(socket);
+    const i = queue.findIndex((q) => q.pid !== pid && q.socket.connected);
+    if (i === -1) {
+      queue.push({ socket, pid });
+      socket.emit('waiting');
+      return;
+    }
+    const other = queue.splice(i, 1)[0];
+    const id = newRoomId();
+    const r = getRoom(id);
+    const whiteFirst = Math.random() < 0.5;
+    r.pids.w = whiteFirst ? pid : other.pid;
+    r.pids.b = whiteFirst ? other.pid : pid;
+    socket.emit('matched', { room: id });
+    other.socket.emit('matched', { room: id });
+  });
+
+  socket.on('cancel', () => removeFromQueue(socket));
+
   socket.on('join', ({ room, pid }) => {
     room = String(room || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
     pid = String(pid || '').slice(0, 64);
@@ -106,6 +146,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    removeFromQueue(socket);
+    io.emit('online', io.engine.clientsCount);
     const { room, color } = socket.data || {};
     const r = rooms.get(room);
     if (r && (color === 'w' || color === 'b') && r.socks[color] === socket.id) {
