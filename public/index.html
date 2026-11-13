@@ -49,12 +49,20 @@ a{color:var(--accent)}
 <h1>♟︎ Шахматы онлайн</h1>
 
 <div id="lobby" class="card">
-  <button class="primary" id="create">Создать партию</button>
+  <button class="primary" id="find" style="font-size:18px;padding:12px">Найти игру</button>
+  <div id="waitBox" class="hide">
+    <div>Ищем соперника…</div>
+    <button id="cancel" style="margin-top:8px">Отмена</button>
+    <div id="botHint" class="hide" style="margin-top:8px">Долго нет соперника? <a href="/bot.html">Сыграй с ботом</a></div>
+  </div>
+  <div id="onlineCount" style="color:var(--muted);font-size:14px"></div>
+  <hr style="width:100%;border:0;border-top:1px solid var(--muted);opacity:.3">
+  <div>Или сыграй с другом по ссылке:</div>
+  <button id="create">Создать партию по ссылке</button>
   <div class="bar" style="width:auto">
     <input id="code" placeholder="Код партии" maxlength="12">
     <button id="joinBtn">Войти</button>
   </div>
-  <div>Создай партию и отправь ссылку другу. Кто зашёл первым, играет белыми.</div>
   <a href="/bot.html">Играть с ботом или вдвоём на одном экране →</a>
 </div>
 
@@ -96,6 +104,29 @@ if(room){
   $("lobby").classList.add("hide");
   $("game").classList.remove("hide");
   startGame();
+}else{
+  startLobby();
+}
+
+function startLobby(){
+  const s=io();
+  let t=null;
+  function reset(){
+    clearTimeout(t);
+    $("waitBox").classList.add("hide");
+    $("find").classList.remove("hide");
+  }
+  s.on("online",n=>{$("onlineCount").textContent="Игроков на сайте: "+n;});
+  s.on("matched",d=>{location.href="?room="+d.room;});
+  s.on("disconnect",reset);
+  $("find").onclick=()=>{
+    $("find").classList.add("hide");
+    $("waitBox").classList.remove("hide");
+    $("botHint").classList.add("hide");
+    s.emit("find",{pid});
+    t=setTimeout(()=>$("botHint").classList.remove("hide"),15000);
+  };
+  $("cancel").onclick=()=>{s.emit("cancel");reset();};
 }
 
 function startGame(){
