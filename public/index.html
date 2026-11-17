@@ -64,6 +64,7 @@ a{color:var(--accent)}
     <button id="joinBtn">Войти</button>
   </div>
   <a href="/bot.html">Играть с ботом или вдвоём на одном экране →</a>
+  <a href="/analyze.html">Анализ партии (вставить PGN) →</a>
 </div>
 
 <div id="game" class="hide" style="display:contents">
@@ -72,6 +73,7 @@ a{color:var(--accent)}
     <button id="flip">Перевернуть</button>
     <button id="resign">Сдаться</button>
     <button class="primary hide" id="rematch">Реванш</button>
+    <button class="hide" id="analyze">Анализ партии</button>
   </div>
   <div id="status"></div>
   <div id="board"></div>
@@ -183,6 +185,7 @@ function startGame(){
     for(let i=0;i<h.length;i+=2){out+="<b>"+(i/2+1)+".</b> "+h[i]+" "+(h[i+1]||"")+"&nbsp; ";}
     $("moves").innerHTML=out||"Ходов пока нет.";
     $("rematch").classList.toggle("hide",!(st&&st.over&&me!=="s"));
+    $("analyze").classList.toggle("hide",!(st&&st.over&&st.history.length>0));
     $("resign").classList.toggle("hide",!(st&&!st.over&&me!=="s"));
   }
   function onSquare(name){
@@ -195,6 +198,12 @@ function startGame(){
     render();
   }
   $("flip").onclick=()=>{flipped=!flipped;render();};
+  $("analyze").onclick=()=>{
+    let p="";
+    st.history.forEach((m,i)=>{p+=(i%2===0?(i/2+1)+". ":"")+m+" ";});
+    try{localStorage.setItem("lastPgn",p.trim());}catch(e){}
+    location.href="/analyze.html?auto=1";
+  };
   $("resign").onclick=()=>{if(confirm("Точно сдаться?"))socket.emit("resign");};
   $("rematch").onclick=()=>{first=true;socket.emit("rematch");};
   $("copy").onclick=async()=>{
