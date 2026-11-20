@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Таблица лидеров</title>
+<style>
+:root{
+  --bg:#f4f1ea;--fg:#1d1d1b;--panel:#fff;--muted:#6b6b66;--accent:#2f6f3e;
+  --sq-l:#eeeed2;--sq-d:#769656;--sel:rgba(255,235,59,.4);--hint:rgba(0,0,0,.22);--last:rgba(255,235,59,.28);--chk:rgba(229,83,75,.85);
+  --bs:min(94vw,520px);
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--bg:#1b1c1a;--fg:#ecebe6;--panel:#262724;--muted:#9a9a93;--accent:#5fb36f;}
+}
+:root[data-theme="dark"]{--bg:#1b1c1a;--fg:#ecebe6;--panel:#262724;--muted:#9a9a93;--accent:#5fb36f;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px 0 24px}
+h1{margin:0;font-size:22px}
+.bar{width:var(--bs);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--muted);border-radius:8px;padding:7px 11px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+#status{width:var(--bs);padding:10px 12px;background:var(--panel);border-radius:8px;font-weight:600;min-height:42px}
+#board{width:var(--bs);height:var(--bs);display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:6px;overflow:hidden;user-select:none;-webkit-user-select:none}
+.sq{position:relative;min-width:0;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:calc(var(--bs)/8*.8);line-height:1;cursor:pointer}
+.sq.l{background:var(--sq-l)}.sq.d{background:var(--sq-d)}
+.sq.last{box-shadow:inset 0 0 0 100px var(--last)}
+.sq.sel{box-shadow:inset 0 0 0 100px var(--sel)}
+.sq.chk{background-image:radial-gradient(circle,var(--chk) 0%,rgba(229,83,75,0) 72%)}
+.sq.hint::after{content:"";position:absolute;width:30%;height:30%;border-radius:50%;background:var(--hint)}
+.sq.hint.cap::after{width:88%;height:88%;background:none;border:5px solid var(--hint)}
+.pc{width:88%;height:88%;display:flex;pointer-events:none}.pc svg{width:100%;height:100%;stroke:#000;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;fill:#fff;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}.dt{fill:none}.pc.w .dt{stroke:#000}.pc.w .ey{fill:#000}
+.pc.b svg{fill:#2a2a2a}.pc.b .dt{stroke:#ddd}.pc.b .ey{fill:#ddd}
+.coord{position:absolute;font-size:10px;font-weight:700;opacity:.65;pointer-events:none;color:#333}
+.coord.r{top:2px;left:3px}.coord.f{bottom:1px;right:3px}
+#moves{width:var(--bs);background:var(--panel);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--muted);min-height:44px;line-height:1.6}
+#moves b{color:var(--fg);font-weight:600}
+
+a{color:var(--accent)}
+.tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+table{width:var(--bs);border-collapse:collapse;background:var(--panel);border-radius:8px;overflow:hidden}
+th,td{padding:8px 10px;text-align:left;font-size:15px}
+th{color:var(--muted);font-weight:600;font-size:13px}
+tr+tr td{border-top:1px solid rgba(128,128,128,.2)}
+td.n{width:36px;color:var(--muted)}td.r{text-align:right;font-weight:700}
+#msg{width:var(--bs);color:var(--muted)}
+</style>
+</head>
+<body>
+<h1>🏆 Таблица лидеров</h1>
+<div class="bar">
+  <button class="tab on" id="tg">Партии</button>
+  <button class="tab" id="tp">Пазлы</button>
+</div>
+<div id="msg"></div>
+<div style="width:var(--bs);overflow-x:auto"><table id="t"></table></div>
+<a href="/">← На главную</a>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function load(type){
+  $("tg").classList.toggle("on",type==="games");
+  $("tp").classList.toggle("on",type==="puzzles");
+  $("msg").textContent="Загрузка…";$("t").innerHTML="";
+  try{
+    const r=await fetch("/api/leaderboard?type="+type);
+    const j=await r.json();
+    if(!r.ok){$("msg").textContent=j.error||"Таблица пока недоступна.";return;}
+    if(!j.rows.length){$("msg").textContent="Пока никого нет. Сыграй рейтинговую партию или реши пазл, войдя в аккаунт.";return;}
+    $("msg").textContent="";
+    $("t").innerHTML="<tr><th></th><th>Игрок</th><th style='text-align:right'>Рейтинг</th><th style='text-align:right'>"+(type==="games"?"Партий":"Пазлов")+"</th></tr>"
+      +j.rows.map((x,i)=>"<tr><td class='n'>"+(i+1)+"</td><td>"+esc(x.username)+"</td><td class='r'>"+x.rating+"</td><td class='r' style='font-weight:400'>"+x.games+"</td></tr>").join("");
+  }catch(e){$("msg").textContent="Не удалось загрузить таблицу.";}
+}
+$("tg").onclick=()=>load("games");$("tp").onclick=()=>load("puzzles");
+load("games");
+</script>
+</body>
+</html>
