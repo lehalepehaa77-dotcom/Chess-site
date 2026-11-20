@@ -49,6 +49,7 @@ a{color:var(--accent)}
 <h1>♟︎ Шахматы онлайн</h1>
 
 <div id="lobby" class="card">
+  <div id="acct"></div>
   <button class="primary" id="find" style="font-size:18px;padding:12px">Найти игру</button>
   <div id="waitBox" class="hide">
     <div>Ищем соперника…</div>
@@ -65,6 +66,7 @@ a{color:var(--accent)}
   </div>
   <a href="/bot.html">Играть с ботом или вдвоём на одном экране →</a>
   <a href="/lessons.html">Уроки тренера →</a>
+  <a href="/leaders.html">Таблица лидеров →</a>
   <a href="/puzzles.html">Пазлы и пазл дня →</a>
   <a href="/analyze.html">Анализ партии (вставить PGN) →</a>
 </div>
@@ -83,6 +85,7 @@ a{color:var(--accent)}
   <a href="/">← В начало</a>
 </div>
 
+<script src="/account.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
@@ -112,7 +115,30 @@ if(room){
   startLobby();
 }
 
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+async function renderAcct(){
+  const box=$("acct");
+  if(!(await Account.status())){box.innerHTML="";return;}
+  const u=await Account.refresh();
+  if(u){
+    box.innerHTML="<div>👤 <b>"+esc(u.username)+"</b> · рейтинг <b>"+u.rating+"</b> · партий: "+u.games+" <button id='logout'>Выйти</button></div>";
+    $("logout").onclick=()=>{Account.logout();renderAcct();};
+  }else{
+    box.innerHTML="<div style='font-size:14px;color:var(--muted)'>Войди, чтобы получить рейтинг и сохранять прогресс. Без входа тоже можно играть.</div>"
+      +"<div class='bar' style='width:auto'><input id='au' placeholder='Имя' maxlength='20' autocomplete='username'><input id='ap' type='password' placeholder='Пароль' autocomplete='current-password'></div>"
+      +"<div class='bar' style='width:auto'><button id='alogin' class='primary'>Войти</button><button id='areg'>Регистрация</button></div>"
+      +"<div id='aerr' style='color:#d9433b;font-size:14px'></div>";
+    const go=async kind=>{
+      $("aerr").textContent="";
+      const r=await Account.auth(kind,$("au").value,$("ap").value);
+      if(r.error)$("aerr").textContent=r.error;else renderAcct();
+    };
+    $("alogin").onclick=()=>go("login");
+    $("areg").onclick=()=>go("register");
+  }
+}
 function startLobby(){
+  renderAcct();
   const s=io();
   let t=null;
   function reset(){
@@ -127,7 +153,7 @@ function startLobby(){
     $("find").classList.add("hide");
     $("waitBox").classList.remove("hide");
     $("botHint").classList.add("hide");
-    s.emit("find",{pid});
+    s.emit("find",{pid,token:Account.token()});
     t=setTimeout(()=>$("botHint").classList.remove("hide"),15000);
   };
   $("cancel").onclick=()=>{s.emit("cancel");reset();};
@@ -138,7 +164,7 @@ function startGame(){
   const boardEl=$("board");
   let me=null,st=null,game=new Chess(),sel=null,targets=[],flipped=false,first=true;
 
-  socket.on("connect",()=>socket.emit("join",{room,pid}));
+  socket.on("connect",()=>socket.emit("join",{room,pid,token:Account.token()}));
   socket.on("you",c=>{me=c;if(first){flipped=(c==="b");first=false;}render();});
   socket.on("state",s=>{st=s;game=new Chess(s.fen);sel=null;targets=[];render();});
 
@@ -148,7 +174,7 @@ function startGame(){
   }
   function statusText(){
     if(!st)return "Подключение…";
-    if(st.over)return st.result;
+    if(st.over){let r=st.result;if(st.delta&&me!=="s"){const dd=me==="w"?st.delta.w:st.delta.b;r+=" Рейтинг: "+(dd>0?"+":"")+dd+".";}return r;}
     const t=st.turn==="w"?"белых":"чёрных";
     if(me==="s")return "Вы наблюдатель. Ход "+t+(game.in_check()?" — шах!":"");
     const opp=me==="w"?"b":"w";
@@ -182,7 +208,8 @@ function startGame(){
         boardEl.appendChild(d);
       }
     }
-    $("status").textContent=statusText();
+    const oppName=(st&&st.names&&me&&me!=="s")?st.names[me==="w"?"b":"w"]:null;
+    $("status").textContent=(st&&st.rated&&!st.over?"🏆 Рейтинговая партия. ":"")+statusText()+(oppName&&!st.over?" · соперник: "+oppName:"");
     const h=st?st.history:[];let out="";
     for(let i=0;i<h.length;i+=2){out+="<b>"+(i/2+1)+".</b> "+h[i]+" "+(h[i+1]||"")+"&nbsp; ";}
     $("moves").innerHTML=out||"Ходов пока нет.";
