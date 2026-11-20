@@ -63,6 +63,7 @@ a{color:var(--accent)}
 </div>
 <a href="/">← На главную</a>
 
+<script src="/account.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
 const SVG={
@@ -78,7 +79,7 @@ const KEY="chessTrainer";
 const $=id=>document.getElementById(id);
 let S={rating:800,solved:0,streak:0,lastDaily:0,seen:[]};
 try{const raw=localStorage.getItem(KEY);if(raw)S=Object.assign(S,JSON.parse(raw));}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}if(window.Account)Account.push();}
 const today=()=>Math.floor(Date.now()/86400000);
 
 let mode="daily",pi=0,g=null,you="w",remaining=1,mistakes=0,hinted=false,revealed=false,done=false,busy=false,counted=false;
