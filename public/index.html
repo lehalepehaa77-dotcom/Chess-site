@@ -40,6 +40,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 #moves b{color:var(--fg);font-weight:600}
 
 input{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--muted);border-radius:8px;padding:7px 11px;width:140px}
+.navgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.navbtn{display:block;text-align:center;padding:14px 8px;border:1px solid var(--muted);border-radius:8px;background:var(--bg);color:var(--fg);text-decoration:none;font-weight:600}
+.navbtn:hover{border-color:var(--accent);color:var(--accent)}
+.navbtn.wide{grid-column:1 / -1}
 .hide{display:none!important}
 .card{width:var(--bs);background:var(--panel);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
 a{color:var(--accent)}
@@ -64,11 +68,15 @@ a{color:var(--accent)}
     <input id="code" placeholder="Код партии" maxlength="12">
     <button id="joinBtn">Войти</button>
   </div>
-  <a href="/bot.html">Играть с ботом или вдвоём на одном экране →</a>
-  <a href="/lessons.html">Уроки тренера →</a>
-  <a href="/leaders.html">Таблица лидеров →</a>
-  <a href="/puzzles.html">Пазлы и пазл дня →</a>
-  <a href="/analyze.html">Анализ партии (вставить PGN) →</a>
+  <hr style="width:100%;border:0;border-top:1px solid var(--muted);opacity:.3">
+  <div>Другие режимы:</div>
+  <div class="navgrid">
+    <a class="navbtn" href="/bot.html">🤖 Игра с ботом</a>
+    <a class="navbtn" href="/puzzles.html">🧩 Пазлы</a>
+    <a class="navbtn" href="/lessons.html">🎓 Уроки тренера</a>
+    <a class="navbtn" href="/analyze.html">🔍 Анализ партии</a>
+    <a class="navbtn wide" href="/leaders.html">🏆 Таблица лидеров</a>
+  </div>
 </div>
 
 <div id="game" class="hide" style="display:contents">
