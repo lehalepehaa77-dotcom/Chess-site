@@ -44,6 +44,9 @@ input{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(
 .navbtn{display:block;text-align:center;padding:14px 8px;border:1px solid var(--muted);border-radius:8px;background:var(--bg);color:var(--fg);text-decoration:none;font-weight:600}
 .navbtn:hover{border-color:var(--accent);color:var(--accent)}
 .navbtn.wide{grid-column:1 / -1}
+.clk{width:var(--bs);text-align:center;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;background:var(--panel);border-radius:8px;padding:6px 10px;opacity:.7}
+.clk.on{opacity:1;box-shadow:0 0 0 2px var(--accent)}
+.clk.low{color:#d9433b}
 .hide{display:none!important}
 .card{width:var(--bs);background:var(--panel);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
 a{color:var(--accent)}
@@ -54,6 +57,12 @@ a{color:var(--accent)}
 
 <div id="lobby" class="card">
   <div id="acct"></div>
+  <select id="tc">
+    <option value="3+0">⏱ 3 минуты</option>
+    <option value="5+0">⏱ 5 минут</option>
+    <option value="10+0" selected>⏱ 10 минут</option>
+    <option value="15+10">⏱ 15 минут + 10 секунд за ход</option>
+  </select>
   <button class="primary" id="find" style="font-size:18px;padding:12px">Найти игру</button>
   <div id="waitBox" class="hide">
     <div>Ищем соперника…</div>
@@ -88,7 +97,9 @@ a{color:var(--accent)}
     <button class="hide" id="analyze">Анализ партии</button>
   </div>
   <div id="status"></div>
+  <div class="clk" id="clkTop"></div>
   <div id="board"></div>
+  <div class="clk" id="clkBot"></div>
   <div id="moves"></div>
   <a href="/">← В начало</a>
 </div>
@@ -112,7 +123,7 @@ try{pid=localStorage.getItem('pid');}catch(e){}
 if(!pid){pid=Math.random().toString(36).slice(2)+Date.now().toString(36);try{localStorage.setItem('pid',pid);}catch(e){}}
 
 function newCode(){const a="abcdefghjkmnpqrstuvwxyz23456789";let s="";for(let i=0;i<6;i++)s+=a[Math.floor(Math.random()*a.length)];return s;}
-$("create").onclick=()=>{location.href="?room="+newCode();};
+$("create").onclick=()=>{location.href="?room="+newCode()+"&tc="+encodeURIComponent($("tc").value);};
 $("joinBtn").onclick=()=>{const c=$("code").value.replace(/[^a-zA-Z0-9]/g,"");if(c)location.href="?room="+c;};
 
 if(room){
@@ -161,7 +172,7 @@ function startLobby(){
     $("find").classList.add("hide");
     $("waitBox").classList.remove("hide");
     $("botHint").classList.add("hide");
-    s.emit("find",{pid,token:Account.token()});
+    s.emit("find",{pid,token:Account.token(),tc:$("tc").value});
     t=setTimeout(()=>$("botHint").classList.remove("hide"),15000);
   };
   $("cancel").onclick=()=>{s.emit("cancel");reset();};
@@ -171,10 +182,23 @@ function startGame(){
   const socket=io();
   const boardEl=$("board");
   let me=null,st=null,game=new Chess(),sel=null,targets=[],flipped=false,first=true;
+  let clk=null,clkAt=0;
+  function fmtTime(ms){const t=Math.ceil(Math.max(0,ms)/1000);return Math.floor(t/60)+":"+String(t%60).padStart(2,"0");}
+  function drawClocks(){
+    if(!clk)return;
+    const top=flipped?"w":"b",bot=flipped?"b":"w";
+    for(const [id,c] of [["clkTop",top],["clkBot",bot]]){
+      const v=clk[c]-(clk.running===c?Date.now()-clkAt:0);
+      const el=$(id);
+      el.textContent=(c==="w"?"⚪ ":"⚫ ")+fmtTime(v);
+      el.className="clk"+(clk.running===c?" on":"")+(v<20000?" low":"");
+    }
+  }
+  setInterval(drawClocks,250);
 
-  socket.on("connect",()=>socket.emit("join",{room,pid,token:Account.token()}));
+  socket.on("connect",()=>socket.emit("join",{room,pid,token:Account.token(),tc:new URLSearchParams(location.search).get("tc")||""}));
   socket.on("you",c=>{me=c;if(first){flipped=(c==="b");first=false;}render();});
-  socket.on("state",s=>{st=s;game=new Chess(s.fen);sel=null;targets=[];render();});
+  socket.on("state",s=>{st=s;clk=s.clock;clkAt=Date.now();game=new Chess(s.fen);sel=null;targets=[];render();});
 
   function findKing(color){
     const b=game.board();
@@ -224,6 +248,7 @@ function startGame(){
     $("rematch").classList.toggle("hide",!(st&&st.over&&me!=="s"));
     $("analyze").classList.toggle("hide",!(st&&st.over&&st.history.length>0));
     $("resign").classList.toggle("hide",!(st&&!st.over&&me!=="s"));
+    drawClocks();
   }
   function onSquare(name){
     if(!st||st.over||me!==game.turn())return;
