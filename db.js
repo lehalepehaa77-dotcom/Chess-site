@@ -22,6 +22,17 @@ async function init() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS users_lower_idx ON users (lower(username))');
+  await pool.query(`CREATE TABLE IF NOT EXISTS games (
+    id SERIAL PRIMARY KEY,
+    white_id INT, black_id INT,
+    white_name TEXT NOT NULL, black_name TEXT NOT NULL,
+    result TEXT NOT NULL, reason TEXT NOT NULL, moves TEXT NOT NULL,
+    tc TEXT NOT NULL, rated BOOLEAN NOT NULL DEFAULT false,
+    delta_w INT, delta_b INT, rating_w INT, rating_b INT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS games_white_idx ON games (white_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS games_black_idx ON games (black_id)');
 }
 function publicUser(u) {
   return {
@@ -74,14 +85,50 @@ async function applyGameResult(wid, bid, score) {
     const W = rows.find((r) => r.id === wid), B = rows.find((r) => r.id === bid);
     if (!W || !B) throw new Error('user not found');
     const { dw, db } = eloUpdate(W.rating, B.rating, score, W.games, B.games);
-    const upd = 'UPDATE users SET rating = GREATEST(100, rating + $1), games = games + 1, wins = wins + $2, losses = losses + $3, draws = draws + $4 WHERE id = $5';
-    await c.query(upd, [dw, score === 1 ? 1 : 0, score === 0 ? 1 : 0, score === 0.5 ? 1 : 0, wid]);
-    await c.query(upd, [db, score === 0 ? 1 : 0, score === 1 ? 1 : 0, score === 0.5 ? 1 : 0, bid]);
+    const upd = 'UPDATE users SET rating = GREATEST(100, rating + $1), games = games + 1, wins = wins + $2, losses = losses + $3, draws = draws + $4 WHERE id = $5 RETURNING rating';
+    const uw = await c.query(upd, [dw, score === 1 ? 1 : 0, score === 0 ? 1 : 0, score === 0.5 ? 1 : 0, wid]);
+    const ub = await c.query(upd, [db, score === 0 ? 1 : 0, score === 1 ? 1 : 0, score === 0.5 ? 1 : 0, bid]);
     await c.query('COMMIT');
-    return { dw, db };
+    return { dw, db, rw: uw.rows[0].rating, rb: ub.rows[0].rating };
   } catch (e) {
     await c.query('ROLLBACK').catch(() => {});
     throw e;
   } finally { c.release(); }
 }
-module.exports = { enabled, init, publicUser, createUser, findByName, findById, saveProgress, leaderboard, applyGameResult };
+async function saveGame(g) {
+  await pool.query(
+    `INSERT INTO games (white_id, black_id, white_name, black_name, result, reason, moves, tc, rated, delta_w, delta_b, rating_w, rating_b)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [g.whiteId, g.blackId, g.whiteName, g.blackName, g.result, g.reason, g.moves, g.tc, g.rated, g.deltaW, g.deltaB, g.ratingW, g.ratingB]);
+}
+function gameRow(r) {
+  return {
+    id: r.id, whiteName: r.white_name, blackName: r.black_name, result: r.result, reason: r.reason, tc: r.tc, rated: r.rated,
+    deltaW: r.delta_w, deltaB: r.delta_b, createdAt: r.created_at
+  };
+}
+async function getProfile(name) {
+  const u = await findByName(name);
+  if (!u) return null;
+  const { rows } = await pool.query(
+    `SELECT id, white_name, black_name, result, reason, tc, rated, delta_w, delta_b, created_at
+     FROM games WHERE white_id = $1 OR black_id = $1 ORDER BY id DESC LIMIT 20`, [u.id]);
+  const hist = await pool.query(
+    `SELECT CASE WHEN white_id = $1 THEN rating_w ELSE rating_b END AS r
+     FROM games WHERE (white_id = $1 OR black_id = $1) AND rated AND rating_w IS NOT NULL ORDER BY id DESC LIMIT 60`, [u.id]);
+  return {
+    user: {
+      username: u.username, rating: u.rating, games: u.games, wins: u.wins, losses: u.losses, draws: u.draws,
+      puzzleRating: u.puzzle_rating, puzzleSolved: u.puzzle_solved, streak: u.streak, lessonsDone: Object.keys(u.lessons || {}).length,
+      createdAt: u.created_at
+    },
+    games: rows.map(gameRow),
+    ratingHistory: hist.rows.map((x) => x.r).reverse()
+  };
+}
+async function getGame(id) {
+  const { rows } = await pool.query('SELECT * FROM games WHERE id = $1', [id]);
+  if (!rows[0]) return null;
+  return Object.assign(gameRow(rows[0]), { moves: rows[0].moves.split(' ').filter(Boolean) });
+}
+module.exports = { saveGame, getProfile, getGame, enabled, init, publicUser, createUser, findByName, findById, saveProgress, leaderboard, applyGameResult };
