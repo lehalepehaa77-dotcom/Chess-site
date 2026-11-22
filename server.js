@@ -112,7 +112,7 @@ function getRoom(id, tc) {
     rooms.set(id, {
       game: new Chess(), pids: { w: null, b: null }, socks: { w: null, b: null }, users: { w: null, b: null },
       timers: { w: null, b: null }, last: null, result: null, outcome: null, rated: false, finalized: false, delta: null, touched: Date.now(),
-      tc: parseTc(tc), clocks: { w: TCS[parseTc(tc)][0], b: TCS[parseTc(tc)][0] }, running: null, lastTick: 0, flagTimer: null
+      tc: parseTc(tc), clocks: { w: TCS[parseTc(tc)][0], b: TCS[parseTc(tc)][0] }, running: null, lastTick: 0, flagTimer: null, drawOffer: null, lastOffer: { w: -99, b: -99 }
     });
   }
   const r = rooms.get(id);
@@ -197,7 +197,8 @@ function publicState(r) {
     names: { w: r.users.w ? r.users.w.username : null, b: r.users.b ? r.users.b.username : null },
     rated: r.rated,
     delta: r.delta,
-    clock: clockState(r)
+    clock: clockState(r),
+    drawOffer: r.drawOffer || null
   };
 }
 function broadcast(roomId) {
@@ -274,7 +275,7 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
-  socket.on('move', ({ from, to } = {}) => {
+  socket.on('move', ({ from, to, promotion } = {}) => {
     const { room, color } = socket.data || {};
     const r = rooms.get(room);
     if (!r || (color !== 'w' && color !== 'b')) return;
@@ -285,10 +286,11 @@ io.on('connection', (socket) => {
       if (r.clocks[r.running] <= 0) { checkFlag(room); return; }
     }
     try {
-      const m = r.game.move({ from, to, promotion: 'q' });
+      const m = r.game.move({ from, to, promotion: ['q', 'r', 'b', 'n'].includes(promotion) ? promotion : 'q' });
       r.last = { from: m.from, to: m.to };
     } catch (e) { return; }
     r.touched = Date.now();
+    r.drawOffer = null;
     if (r.running) r.clocks[color] += TCS[r.tc][1];
     if (r.game.history().length >= 1) { r.running = r.game.turn(); r.lastTick = Date.now(); }
     afterChange(room);
@@ -304,6 +306,35 @@ io.on('connection', (socket) => {
     afterChange(room);
   });
 
+  socket.on('offerDraw', () => {
+    const { room, color } = socket.data || {};
+    const r = rooms.get(room);
+    if (!r || (color !== 'w' && color !== 'b') || resultOf(r) || r.drawOffer) return;
+    const n = r.game.history().length;
+    if (n < 4 || n - r.lastOffer[color] < 6) return;
+    r.drawOffer = color;
+    r.lastOffer[color] = n;
+    broadcast(room);
+  });
+
+  socket.on('acceptDraw', () => {
+    const { room, color } = socket.data || {};
+    const r = rooms.get(room);
+    if (!r || (color !== 'w' && color !== 'b') || resultOf(r) || !r.drawOffer || r.drawOffer === color) return;
+    r.drawOffer = null;
+    r.outcome = 'd';
+    r.result = 'Ничья по соглашению.';
+    afterChange(room);
+  });
+
+  socket.on('declineDraw', () => {
+    const { room, color } = socket.data || {};
+    const r = rooms.get(room);
+    if (!r || (color !== 'w' && color !== 'b') || !r.drawOffer || r.drawOffer === color) return;
+    r.drawOffer = null;
+    broadcast(room);
+  });
+
   socket.on('rematch', () => {
     const { room, color } = socket.data || {};
     const r = rooms.get(room);
@@ -316,6 +347,8 @@ io.on('connection', (socket) => {
     r.delta = null;
     r.clocks = { w: TCS[r.tc][0], b: TCS[r.tc][0] };
     r.running = null;
+    r.drawOffer = null;
+    r.lastOffer = { w: -99, b: -99 };
     clearTimeout(r.flagTimer);
     [r.pids.w, r.pids.b] = [r.pids.b, r.pids.w];
     [r.socks.w, r.socks.b] = [r.socks.b, r.socks.w];
