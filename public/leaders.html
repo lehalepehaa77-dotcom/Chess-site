@@ -72,7 +72,7 @@ async function load(type){
     if(!j.rows.length){$("msg").textContent="Пока никого нет. Сыграй рейтинговую партию или реши пазл, войдя в аккаунт.";return;}
     $("msg").textContent="";
     $("t").innerHTML="<tr><th></th><th>Игрок</th><th style='text-align:right'>Рейтинг</th><th style='text-align:right'>"+(type==="games"?"Партий":"Пазлов")+"</th></tr>"
-      +j.rows.map((x,i)=>"<tr><td class='n'>"+(i+1)+"</td><td>"+esc(x.username)+"</td><td class='r'>"+x.rating+"</td><td class='r' style='font-weight:400'>"+x.games+"</td></tr>").join("");
+      +j.rows.map((x,i)=>"<tr><td class='n'>"+(i+1)+"</td><td><a href='/profile.html?u="+encodeURIComponent(x.username)+"'>"+esc(x.username)+"</a></td><td class='r'>"+x.rating+"</td><td class='r' style='font-weight:400'>"+x.games+"</td></tr>").join("");
   }catch(e){$("msg").textContent="Не удалось загрузить таблицу.";}
 }
 $("tg").onclick=()=>load("games");$("tp").onclick=()=>load("puzzles");
