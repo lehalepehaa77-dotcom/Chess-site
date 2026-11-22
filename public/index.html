@@ -47,6 +47,9 @@ input{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(
 .clk{width:var(--bs);text-align:center;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;background:var(--panel);border-radius:8px;padding:6px 10px;opacity:.7}
 .clk.on{opacity:1;box-shadow:0 0 0 2px var(--accent)}
 .clk.low{color:#d9433b}
+#promo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:8px;align-items:center;background:var(--panel);padding:12px;border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,.45);z-index:20}
+.pbtn{width:64px;height:64px;padding:4px}
+.pbtn .pc{width:100%;height:100%;display:flex}
 .hide{display:none!important}
 .card{width:var(--bs);background:var(--panel);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
 a{color:var(--accent)}
@@ -93,10 +96,13 @@ a{color:var(--accent)}
     <button id="copy">Скопировать ссылку</button>
     <button id="flip">Перевернуть</button>
     <button id="resign">Сдаться</button>
+    <button id="draw" class="hide">Ничья?</button>
     <button class="primary hide" id="rematch">Реванш</button>
     <button class="hide" id="analyze">Анализ партии</button>
   </div>
+  <div id="drawbar" class="card hide" style="flex-direction:row;align-items:center;flex-wrap:wrap"></div>
   <div id="status"></div>
+  <div id="promo" class="hide"></div>
   <div class="clk" id="clkTop"></div>
   <div id="board"></div>
   <div class="clk" id="clkBot"></div>
@@ -195,6 +201,19 @@ function startGame(){
     }
   }
   setInterval(drawClocks,250);
+  function askPromo(){
+    return new Promise(res=>{
+      const box=$("promo");box.innerHTML="";
+      for(const t of ["q","r","b","n"]){
+        const b=document.createElement("button");b.className="pbtn";
+        b.innerHTML="<span class='pc "+me+"'>"+SVG[t]+"</span>";
+        b.onclick=()=>{box.classList.add("hide");res(t);};
+        box.appendChild(b);
+      }
+      const x=document.createElement("button");x.textContent="✕";x.onclick=()=>{box.classList.add("hide");res(null);};
+      box.appendChild(x);box.classList.remove("hide");
+    });
+  }
 
   socket.on("connect",()=>socket.emit("join",{room,pid,token:Account.token(),tc:new URLSearchParams(location.search).get("tc")||""}));
   socket.on("you",c=>{me=c;if(first){flipped=(c==="b");first=false;}render();});
@@ -249,17 +268,34 @@ function startGame(){
     $("analyze").classList.toggle("hide",!(st&&st.over&&st.history.length>0));
     $("resign").classList.toggle("hide",!(st&&!st.over&&me!=="s"));
     drawClocks();
+    const dbx=$("drawbar");
+    if(st&&!st.over&&me!=="s"&&st.drawOffer&&st.drawOffer!==me){
+      dbx.classList.remove("hide");
+      dbx.innerHTML="<span>Соперник предлагает ничью</span><button class='primary' id='dyes'>Принять</button><button id='dno'>Отклонить</button>";
+      $("dyes").onclick=()=>socket.emit("acceptDraw");
+      $("dno").onclick=()=>socket.emit("declineDraw");
+    }else if(st&&!st.over&&st.drawOffer&&st.drawOffer===me){
+      dbx.classList.remove("hide");dbx.textContent="Ты предложил ничью. Ждём ответа…";
+    }else dbx.classList.add("hide");
+    $("draw").classList.toggle("hide",!(st&&!st.over&&me!=="s"&&st.history.length>=4&&!st.drawOffer));
   }
   function onSquare(name){
     if(!st||st.over||me!==game.turn())return;
     const m=targets.find(x=>x.to===name);
-    if(sel&&m){socket.emit("move",{from:m.from,to:m.to});sel=null;targets=[];render();return;}
+    if(sel&&m){
+      const from=m.from,to=m.to,isPromo=targets.some(x=>x.to===name&&x.promotion);
+      sel=null;targets=[];render();
+      if(isPromo)askPromo().then(t=>{if(t)socket.emit("move",{from,to,promotion:t});});
+      else socket.emit("move",{from,to});
+      return;
+    }
     const p=game.get(name);
     if(p&&p.color===game.turn()){sel=name;targets=game.moves({square:name,verbose:true});}
     else{sel=null;targets=[];}
     render();
   }
   $("flip").onclick=()=>{flipped=!flipped;render();};
+  $("draw").onclick=()=>socket.emit("offerDraw");
   $("analyze").onclick=()=>{
     let p="";
     st.history.forEach((m,i)=>{p+=(i%2===0?(i/2+1)+". ":"")+m+" ";});
