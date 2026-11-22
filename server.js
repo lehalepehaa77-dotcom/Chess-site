@@ -78,6 +78,24 @@ app.post('/api/progress', needDb, needAuth, async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
+app.get('/api/profile/:name', needDb, async (req, res) => {
+  try {
+    const p = await db.getProfile(String(req.params.name).slice(0, 30));
+    if (!p) return res.status(404).json({ error: 'Игрок не найден' });
+    res.json(p);
+  } catch (e) { fail(res, e); }
+});
+
+app.get('/api/game/:id', needDb, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Неверный номер партии' });
+  try {
+    const g = await db.getGame(id);
+    if (!g) return res.status(404).json({ error: 'Партия не найдена' });
+    res.json({ game: g });
+  } catch (e) { fail(res, e); }
+});
+
 app.get('/api/leaderboard', needDb, async (req, res) => {
   try { res.json({ rows: await db.leaderboard(req.query.type === 'puzzles' ? 'puzzles' : 'games') }); }
   catch (e) { fail(res, e); }
@@ -112,7 +130,7 @@ function getRoom(id, tc) {
     rooms.set(id, {
       game: new Chess(), pids: { w: null, b: null }, socks: { w: null, b: null }, users: { w: null, b: null },
       timers: { w: null, b: null }, last: null, result: null, outcome: null, rated: false, finalized: false, delta: null, touched: Date.now(),
-      tc: parseTc(tc), clocks: { w: TCS[parseTc(tc)][0], b: TCS[parseTc(tc)][0] }, running: null, lastTick: 0, flagTimer: null, drawOffer: null, lastOffer: { w: -99, b: -99 }
+      tc: parseTc(tc), clocks: { w: TCS[parseTc(tc)][0], b: TCS[parseTc(tc)][0] }, running: null, lastTick: 0, flagTimer: null, drawOffer: null, lastOffer: { w: -99, b: -99 }, recorded: false
     });
   }
   const r = rooms.get(id);
@@ -205,6 +223,17 @@ function broadcast(roomId) {
   const r = rooms.get(roomId);
   if (r) io.to(roomId).emit('state', publicState(r));
 }
+// сохранение завершённой партии в историю (только если в ней есть вошедший игрок)
+function recordGame(r, d) {
+  const o = outcomeOf(r);
+  return db.saveGame({
+    whiteId: r.users.w ? r.users.w.id : null, blackId: r.users.b ? r.users.b.id : null,
+    whiteName: r.users.w ? r.users.w.username : 'Гость', blackName: r.users.b ? r.users.b.username : 'Гость',
+    result: o === 'w' ? '1-0' : o === 'b' ? '0-1' : '1/2-1/2',
+    reason: resultOf(r), moves: r.game.history().join(' '), tc: r.tc, rated: r.rated,
+    deltaW: d ? d.dw : null, deltaB: d ? d.db : null, ratingW: d ? d.rw : null, ratingB: d ? d.rb : null
+  });
+}
 // после любого изменения: разослать состояние и, если рейтинговая партия закончилась, обновить рейтинги
 function afterChange(roomId) {
   const r = rooms.get(roomId);
@@ -216,8 +245,15 @@ function afterChange(roomId) {
     const o = outcomeOf(r);
     const score = o === 'w' ? 1 : o === 'b' ? 0 : 0.5;
     db.applyGameResult(r.users.w.id, r.users.b.id, score)
-      .then((d) => { r.delta = { w: d.dw, b: d.db }; broadcast(roomId); })
-      .catch((e) => console.error('Rating update failed', e));
+      .then((d) => {
+        r.delta = { w: d.dw, b: d.db };
+        broadcast(roomId);
+        if (!r.recorded && r.game.history().length >= 2) { r.recorded = true; return recordGame(r, d); }
+      })
+      .catch((e) => console.error('Rating update or game save failed', e));
+  } else if (!r.rated && !r.recorded && resultOf(r) && (r.users.w || r.users.b) && r.game.history().length >= 2 && db.enabled) {
+    r.recorded = true;
+    recordGame(r, null).catch((e) => console.error('Game save failed', e));
   }
 }
 
@@ -344,6 +380,7 @@ io.on('connection', (socket) => {
     r.result = null;
     r.outcome = null;
     r.finalized = false;
+    r.recorded = false;
     r.delta = null;
     r.clocks = { w: TCS[r.tc][0], b: TCS[r.tc][0] };
     r.running = null;
