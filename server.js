@@ -90,6 +90,10 @@ else console.log('DATABASE_URL is not set: accounts and ratings are disabled');
 const rooms = new Map();
 const queue = [];
 
+// контроль времени: [базовое время мс, добавка за ход мс]
+const TCS = { '3+0': [180000, 0], '5+0': [300000, 0], '10+0': [600000, 0], '15+10': [900000, 10000] };
+function parseTc(s) { return TCS[s] ? s : '10+0'; }
+
 function removeFromQueue(socket) {
   const i = queue.findIndex((q) => q.socket === socket);
   if (i !== -1) queue.splice(i, 1);
@@ -103,11 +107,12 @@ function newRoomId() {
   } while (rooms.has(s));
   return s;
 }
-function getRoom(id) {
+function getRoom(id, tc) {
   if (!rooms.has(id)) {
     rooms.set(id, {
       game: new Chess(), pids: { w: null, b: null }, socks: { w: null, b: null }, users: { w: null, b: null },
-      timers: { w: null, b: null }, last: null, result: null, outcome: null, rated: false, finalized: false, delta: null, touched: Date.now()
+      timers: { w: null, b: null }, last: null, result: null, outcome: null, rated: false, finalized: false, delta: null, touched: Date.now(),
+      tc: parseTc(tc), clocks: { w: TCS[parseTc(tc)][0], b: TCS[parseTc(tc)][0] }, running: null, lastTick: 0, flagTimer: null
     });
   }
   const r = rooms.get(id);
@@ -135,6 +140,49 @@ function outcomeOf(r) {
   if (r.game.isCheckmate()) return r.game.turn() === 'w' ? 'b' : 'w';
   return resultOf(r) ? 'd' : null;
 }
+// ---- часы ----
+function clockState(r) {
+  const live = { w: r.clocks.w, b: r.clocks.b };
+  if (r.running) live[r.running] -= Date.now() - r.lastTick;
+  return { w: Math.max(0, live.w), b: Math.max(0, live.b), running: r.running, tc: r.tc };
+}
+function tick(r) {
+  if (!r.running) return;
+  const now = Date.now();
+  r.clocks[r.running] -= now - r.lastTick;
+  r.lastTick = now;
+}
+function cannotMate(g, color) {
+  const own = g.board().flat().filter((p) => p && p.color === color && p.type !== 'k');
+  return own.length === 0 || (own.length === 1 && (own[0].type === 'n' || own[0].type === 'b'));
+}
+function scheduleFlag(roomId) {
+  const r = rooms.get(roomId);
+  if (!r) return;
+  clearTimeout(r.flagTimer);
+  if (!r.running || resultOf(r)) return;
+  const ms = Math.max(0, r.clocks[r.running] - (Date.now() - r.lastTick));
+  r.flagTimer = setTimeout(() => checkFlag(roomId), ms + 50);
+}
+function checkFlag(roomId) {
+  const r = rooms.get(roomId);
+  if (!r || !r.running || resultOf(r)) return;
+  tick(r);
+  if (r.clocks[r.running] > 0) { scheduleFlag(roomId); return; }
+  const loser = r.running;
+  r.clocks[loser] = 0;
+  r.running = null;
+  const winner = loser === 'w' ? 'b' : 'w';
+  if (cannotMate(r.game, winner)) {
+    r.outcome = 'd';
+    r.result = 'Время вышло, но у соперника недостаточно материала для мата. Ничья.';
+  } else {
+    r.outcome = winner;
+    r.result = 'Время вышло. Победили ' + (winner === 'w' ? 'белые' : 'чёрные') + '.';
+  }
+  afterChange(roomId);
+}
+
 function publicState(r) {
   const res = resultOf(r);
   return {
@@ -148,7 +196,8 @@ function publicState(r) {
     seated: { w: !!r.pids.w, b: !!r.pids.b },
     names: { w: r.users.w ? r.users.w.username : null, b: r.users.b ? r.users.b.username : null },
     rated: r.rated,
-    delta: r.delta
+    delta: r.delta,
+    clock: clockState(r)
   };
 }
 function broadcast(roomId) {
@@ -159,6 +208,7 @@ function broadcast(roomId) {
 function afterChange(roomId) {
   const r = rooms.get(roomId);
   if (!r) return;
+  if (resultOf(r)) { tick(r); r.running = null; clearTimeout(r.flagTimer); }
   broadcast(roomId);
   if (r.rated && !r.finalized && resultOf(r) && r.users.w && r.users.b) {
     r.finalized = true;
@@ -173,20 +223,21 @@ function afterChange(roomId) {
 io.on('connection', (socket) => {
   io.emit('online', io.engine.clientsCount);
 
-  socket.on('find', async ({ pid, token } = {}) => {
+  socket.on('find', async ({ pid, token, tc } = {}) => {
     pid = String(pid || '').slice(0, 64);
     if (!pid) return;
+    const tcv = parseTc(tc);
     const user = await socketUser(token);
     removeFromQueue(socket);
-    const i = queue.findIndex((q) => q.pid !== pid && q.socket.connected && !(user && q.user && q.user.id === user.id));
+    const i = queue.findIndex((q) => q.pid !== pid && q.tc === tcv && q.socket.connected && !(user && q.user && q.user.id === user.id));
     if (i === -1) {
-      queue.push({ socket, pid, user });
+      queue.push({ socket, pid, user, tc: tcv });
       socket.emit('waiting');
       return;
     }
     const other = queue.splice(i, 1)[0];
     const id = newRoomId();
-    const r = getRoom(id);
+    const r = getRoom(id, tcv);
     const whiteFirst = Math.random() < 0.5;
     r.pids.w = whiteFirst ? pid : other.pid;
     r.pids.b = whiteFirst ? other.pid : pid;
@@ -199,12 +250,12 @@ io.on('connection', (socket) => {
 
   socket.on('cancel', () => removeFromQueue(socket));
 
-  socket.on('join', async ({ room, pid, token } = {}) => {
+  socket.on('join', async ({ room, pid, token, tc } = {}) => {
     room = String(room || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
     pid = String(pid || '').slice(0, 64);
     if (!room || !pid) return;
     const user = await socketUser(token);
-    const r = getRoom(room);
+    const r = getRoom(room, tc);
     let color;
     if (r.pids.w === pid) color = 'w';
     else if (r.pids.b === pid) color = 'b';
@@ -229,12 +280,19 @@ io.on('connection', (socket) => {
     if (!r || (color !== 'w' && color !== 'b')) return;
     if (resultOf(r) || r.game.turn() !== color) return;
     if (typeof from !== 'string' || typeof to !== 'string') return;
+    if (r.running) {
+      tick(r);
+      if (r.clocks[r.running] <= 0) { checkFlag(room); return; }
+    }
     try {
       const m = r.game.move({ from, to, promotion: 'q' });
       r.last = { from: m.from, to: m.to };
     } catch (e) { return; }
     r.touched = Date.now();
+    if (r.running) r.clocks[color] += TCS[r.tc][1];
+    if (r.game.history().length >= 1) { r.running = r.game.turn(); r.lastTick = Date.now(); }
     afterChange(room);
+    scheduleFlag(room);
   });
 
   socket.on('resign', () => {
@@ -256,6 +314,9 @@ io.on('connection', (socket) => {
     r.outcome = null;
     r.finalized = false;
     r.delta = null;
+    r.clocks = { w: TCS[r.tc][0], b: TCS[r.tc][0] };
+    r.running = null;
+    clearTimeout(r.flagTimer);
     [r.pids.w, r.pids.b] = [r.pids.b, r.pids.w];
     [r.socks.w, r.socks.b] = [r.socks.b, r.socks.w];
     [r.users.w, r.users.b] = [r.users.b, r.users.w];
