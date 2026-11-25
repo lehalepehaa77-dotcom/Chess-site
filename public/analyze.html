@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Анализ партии</title>
+<title>Шахматы</title>
 <style>
 :root{
   --bg:#f4f1ea;--fg:#1d1d1b;--panel:#fff;--muted:#6b6b66;--accent:#2f6f3e;
@@ -38,45 +38,34 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .coord.r{top:2px;left:3px}.coord.f{bottom:1px;right:3px}
 #moves{width:var(--bs);background:var(--panel);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--muted);min-height:44px;line-height:1.6}
 #moves b{color:var(--fg);font-weight:600}
-
+#promo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:8px;align-items:center;background:var(--panel);padding:12px;border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,.45);z-index:20}
+.pbtn{width:64px;height:64px;padding:4px}
+.pbtn .pc{width:100%;height:100%;display:flex}
 .hide{display:none!important}
-.card{width:var(--bs);background:var(--panel);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
-textarea{width:100%;font:inherit;font-size:14px;color:var(--fg);background:var(--bg);border:1px solid var(--muted);border-radius:8px;padding:8px}
-a{color:var(--accent)}
-#evalbar{width:var(--bs);height:14px;background:#333;border-radius:7px;overflow:hidden;position:relative}
-#evalfill{height:100%;background:#f2f2f2;width:50%;transition:width .25s}
-#evaltxt{width:var(--bs);font-size:13px;color:var(--muted);text-align:center}
-#comment{width:var(--bs);min-height:46px;background:var(--panel);border-radius:8px;padding:10px 12px;font-size:15px}
-#graph{width:var(--bs);height:70px;background:var(--panel);border-radius:8px;cursor:pointer;display:block}
-.mv{cursor:pointer;padding:1px 4px;border-radius:4px;border-bottom:3px solid transparent;display:inline-block}
-.mv.cur{background:var(--sel)}
-.sq{cursor:default}
 </style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
-<h1>🔍 Анализ партии</h1>
-
-<div class="card" id="inputBox">
-  <textarea id="pgn" rows="5" placeholder="Вставь PGN или ходы: 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 …"></textarea>
-  <div class="bar" style="width:auto">
-    <button class="primary" id="go">Анализировать</button>
-    <a href="/">← На главную</a>
-  </div>
-  <div id="msg" style="color:var(--muted);font-size:14px">Анализ идёт прямо в твоём браузере и занимает около полуминуты на партию.</div>
+<script src="/nav.js"></script>
+<h1>♟︎ Шахматы</h1>
+<a href="/" style="color:var(--accent)">← Онлайн-игра с другом</a>
+<div class="bar">
+  <select id="mode">
+    <option value="bot">Против бота</option>
+    <option value="two">Вдвоём на одном экране</option>
+  </select>
+  <select id="color"><option value="w">Я белыми</option><option value="b">Я чёрными</option></select>
+  <select id="level"><option value="1">Лёгкий</option><option value="2" selected>Средний</option><option value="3">Сложный</option></select>
 </div>
-
-<div id="result" class="hide" style="display:contents">
-  <div class="card" id="sum"></div>
-  <div id="evalbar"><div id="evalfill"></div></div>
-  <div id="evaltxt"></div>
-  <div id="board"></div>
-  <div id="comment"></div>
-  <div class="bar">
-    <button id="first">⏮</button><button id="prev">◀</button><button id="next">▶</button><button id="lastb">⏭</button><button id="flip">Перевернуть</button>
-  </div>
-  <svg id="graph" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
-  <div id="moves"></div>
+<div class="bar">
+  <button class="primary" id="new">Новая партия</button>
+  <button id="undo">Отменить ход</button>
+  <button id="flip">Перевернуть</button>
 </div>
+<div id="status"></div>
+<div id="board"></div>
+<div id="promo" class="hide"></div>
+<div id="moves"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
@@ -88,167 +77,162 @@ b:`<svg viewBox='0 0 45 45'><path d='M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10
 q:`<svg viewBox='0 0 45 45'><path d='M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.2-8.2 13.4-8.2-13.4L14 25 6.5 13.5z'/><path d='M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z'/><circle cx='6' cy='12' r='2'/><circle cx='14' cy='9' r='2'/><circle cx='22.5' cy='8' r='2'/><circle cx='31' cy='9' r='2'/><circle cx='39' cy='12' r='2'/><path class='dt' d='M11 38.5c5.5 1.5 17.5 1.5 23 0M11.5 30c3.5-1 18.5-1 22 0'/></svg>`,
 k:`<svg viewBox='0 0 45 45'><path d='M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5'/><path d='M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z'/><path class='dt' d='M22.5 11.63V6M20 8h5M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0'/></svg>`
 };
+const VAL={p:100,n:320,b:330,r:500,q:900,k:0};
+let game=new Chess(),sel=null,targets=[],last=null,flipped=false,thinking=false;
 const $=id=>document.getElementById(id);
-const LAB={best:["Лучший ход","#3a9d5d",""],good:["Хороший ход","#7aa83a",""],inacc:["Неточность","#e0a800","?!"],mist:["Ошибка","#e57f22","?"],blun:["Грубая ошибка","#d9433b","??"]};
-const wp=cp=>50+50*(2/(1+Math.exp(-0.00368208*cp))-1);
-const clampCp=c=>Math.max(-1500,Math.min(1500,c));
-let fens=[],moves=[],cpW=[],bestUci=[],info=[],cur=0,flipped=false;
+const boardEl=$("board");
 
-/* ---------- Движок Stockfish (в браузере, через Web Worker) ---------- */
-const URLS=[
-  "https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js",
-  "https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js"
-];
-let eng=null,waiter=null;
-function spawn(url){
-  return new Promise((res,rej)=>{
-    let w;
-    try{w=new Worker(URL.createObjectURL(new Blob(['importScripts("'+url+'");'],{type:"text/javascript"})));}
-    catch(e){return rej(e);}
-    const to=setTimeout(()=>{w.terminate();rej(new Error("timeout"));},20000);
-    w.onerror=e=>{clearTimeout(to);w.terminate();rej(e);};
-    w.onmessage=e=>{if(typeof e.data==="string"&&e.data.indexOf("uciok")===0){clearTimeout(to);res(w);}};
-    w.postMessage("uci");
-  });
-}
-async function getEngine(){
-  for(const u of URLS){
-    try{const w=await spawn(u);w.onerror=null;w.onmessage=onLine;return w;}catch(e){}
-  }
-  throw new Error("engine");
-}
-function onLine(e){
-  const l=typeof e.data==="string"?e.data:"";
-  if(!waiter)return;
-  if(l.indexOf("info")===0&&l.indexOf(" score ")>0){
-    const m=l.match(/score (cp|mate) (-?\d+)/);
-    if(m)waiter.cp=m[1]==="cp"?+m[2]:(+m[2]>0?1500:-1500);
-  }else if(l.indexOf("bestmove")===0){
-    const w=waiter;waiter=null;
-    const b=l.split(" ")[1];
-    w.res({cp:clampCp(w.cp),best:(b&&b!=="(none)")?b:null});
-  }
-}
-function evalFen(fen){
-  const g=new Chess(fen);
-  if(g.game_over())return Promise.resolve({cp:g.in_checkmate()?-1500:0,best:null});
-  return new Promise(res=>{
-    waiter={res,cp:0};
-    eng.postMessage("position fen "+fen);
-    eng.postMessage("go movetime 400");
-  });
-}
+function botColor(){return $("color").value==="w"?"b":"w";}
+function isBotTurn(){return $("mode").value==="bot"&&game.turn()===botColor();}
 
-/* ---------- Анализ ---------- */
-const msg=t=>{$("msg").textContent=t;};
-async function analyze(){
-  const text=$("pgn").value.trim();
-  const g=new Chess();
-  if(!text||!g.load_pgn(text,{sloppy:true})){msg("Не получилось прочитать партию. Проверь, что вставлен PGN или список ходов.");return;}
-  const hist=g.history({verbose:true}).slice(0,160);
-  if(!hist.length){msg("В партии нет ходов.");return;}
-  const b=new Chess();
-  fens=[b.fen()];moves=[];
-  for(const m of hist){moves.push(b.move({from:m.from,to:m.to,promotion:m.promotion}));fens.push(b.fen());}
-  $("go").disabled=true;
-  msg("Загружаем шахматный движок…");
-  try{eng=await getEngine();}
-  catch(e){msg("Не удалось загрузить шахматный движок. Проверь интернет и попробуй ещё раз.");$("go").disabled=false;return;}
-  cpW=[];bestUci=[];
-  for(let i=0;i<fens.length;i++){
-    msg("Анализ: позиция "+(i+1)+" из "+fens.length+"…");
-    const r=await evalFen(fens[i]);
-    cpW[i]=fens[i].split(" ")[1]==="w"?r.cp:-r.cp;
-    bestUci[i]=r.best;
+function render(){
+  boardEl.innerHTML="";
+  const b=game.board();
+  const kingSq=game.in_check()?findKing(game.turn()):null;
+  for(let i=0;i<8;i++){
+    for(let j=0;j<8;j++){
+      const r=flipped?7-i:i, f=flipped?7-j:j;
+      const name="abcdefgh"[f]+(8-r);
+      const p=b[r][f];
+      const d=document.createElement("div");
+      d.className="sq "+((r+f)%2===0?"l":"d");
+      if(last&&(last.from===name||last.to===name))d.classList.add("last");
+      if(sel===name)d.classList.add("sel");
+      if(kingSq===name)d.classList.add("chk");
+      const t=targets.find(m=>m.to===name);
+      if(t){d.classList.add("hint");if(p||t.flags.includes("e"))d.classList.add("cap");}
+      if(p){const s=document.createElement("span");s.className="pc "+p.color;s.innerHTML=SVG[p.type];d.appendChild(s);}
+      if(j===0){const c=document.createElement("span");c.className="coord r";c.textContent=8-r;d.appendChild(c);}
+      if(i===7){const c=document.createElement("span");c.className="coord f";c.textContent="abcdefgh"[f];d.appendChild(c);}
+      d.onclick=()=>onSquare(name);
+      boardEl.appendChild(d);
+    }
   }
-  eng.terminate();eng=null;
-  classify();
-  $("inputBox").classList.add("hide");
-  $("result").classList.remove("hide");
-  cur=moves.length;
+  updateStatus();updateMoves();
+}
+function findKing(color){
+  const b=game.board();
+  for(let r=0;r<8;r++)for(let f=0;f<8;f++){const p=b[r][f];if(p&&p.type==="k"&&p.color===color)return "abcdefgh"[f]+(8-r);}
+}
+function updateStatus(){
+  let s;
+  const who=game.turn()==="w"?"белых":"чёрных";
+  if(game.in_checkmate())s="Мат! Победили "+(game.turn()==="w"?"чёрные":"белые")+".";
+  else if(game.in_stalemate())s="Пат. Ничья.";
+  else if(game.in_threefold_repetition())s="Ничья: троекратное повторение.";
+  else if(game.insufficient_material())s="Ничья: недостаточно материала.";
+  else if(game.in_draw())s="Ничья.";
+  else{
+    s="Ход "+who+(game.in_check()?" — шах!":"");
+    if(thinking)s="Бот думает…";
+  }
+  $("status").textContent=s;
+}
+function updateMoves(){
+  const h=game.history();let out="";
+  for(let i=0;i<h.length;i+=2){out+="<b>"+(i/2+1)+".</b> "+h[i]+" "+(h[i+1]||"")+"&nbsp; ";}
+  $("moves").innerHTML=out||"Ходов пока нет.";
+}
+function onSquare(name){
+  if(game.game_over()||thinking||isBotTurn())return;
+  const m=targets.find(x=>x.to===name);
+  if(sel&&m){
+    if(targets.some(x=>x.to===name&&x.promotion)){askPromo(game.turn()).then(t=>{if(t)doMove(m,t);});}
+    else doMove(m);
+    return;
+  }
+  const p=game.get(name);
+  if(p&&p.color===game.turn()){
+    sel=name;targets=game.moves({square:name,verbose:true});
+  }else{sel=null;targets=[];}
   render();
 }
-function classify(){
-  info=[null];
-  for(let i=1;i<fens.length;i++){
-    const mv=moves[i-1],isW=mv.color==="w";
-    const before=isW?cpW[i-1]:-cpW[i-1],after=isW?cpW[i]:-cpW[i];
-    const wl=Math.max(0,wp(before)-wp(after));
-    const played=mv.from+mv.to+(mv.promotion||"");
-    const kind=played===bestUci[i-1]?"best":wl<5?"good":wl<10?"inacc":wl<20?"mist":"blun";
-    const acc=Math.max(0,Math.min(100,103.1668*Math.exp(-0.04354*wl)-3.1669));
-    let bestSan=null;
-    if(bestUci[i-1]&&kind!=="best"){
-      const g2=new Chess(fens[i-1]);
-      const bm=bestUci[i-1];
-      const m2=g2.move({from:bm.slice(0,2),to:bm.slice(2,4),promotion:bm[4]});
-      bestSan=m2?m2.san:bm;
+function askPromo(color){
+  return new Promise(res=>{
+    const box=$("promo");box.innerHTML="";
+    for(const t of ["q","r","b","n"]){
+      const bt=document.createElement("button");bt.className="pbtn";
+      bt.innerHTML="<span class='pc "+color+"'>"+SVG[t]+"</span>";
+      bt.onclick=()=>{box.classList.add("hide");res(t);};
+      box.appendChild(bt);
     }
-    info[i]={kind,acc,bestSan,color:mv.color};
-  }
-  const out=[];
-  for(const c of ["w","b"]){
-    const a=info.filter(x=>x&&x.color===c);
-    const n=k=>a.filter(x=>x.kind===k).length;
-    const acc=a.length?a.reduce((s,x)=>s+x.acc,0)/a.length:0;
-    out.push("<b>"+(c==="w"?"Белые":"Чёрные")+":</b> точность ≈ "+acc.toFixed(0)+"% · неточностей: "+n("inacc")+" · ошибок: "+n("mist")+" · грубых ошибок: "+n("blun"));
-  }
-  $("sum").innerHTML=out.join("<br>");
-}
-
-/* ---------- Отрисовка ---------- */
-function fmt(cp){return Math.abs(cp)>=1400?(cp>0?"+мат":"−мат"):((cp>0?"+":cp<0?"−":"")+(Math.abs(cp)/100).toFixed(2));}
-function render(){
-  const g=new Chess(fens[cur]);
-  const bd=g.board();
-  const last=cur>0?moves[cur-1]:null;
-  const board=$("board");board.innerHTML="";
-  for(let i=0;i<8;i++)for(let j=0;j<8;j++){
-    const r=flipped?7-i:i,f=flipped?7-j:j;
-    const name="abcdefgh"[f]+(8-r);
-    const p=bd[r][f];
-    const d=document.createElement("div");
-    d.className="sq "+((r+f)%2===0?"l":"d");
-    if(last&&(last.from===name||last.to===name))d.classList.add("last");
-    if(p){const s=document.createElement("span");s.className="pc "+p.color;s.innerHTML=SVG[p.type];d.appendChild(s);}
-    board.appendChild(d);
-  }
-  const w=wp(cpW[cur]);
-  $("evalfill").style.width=(flipped?100-w:w)+"%";
-  $("evaltxt").textContent="Оценка: "+fmt(cpW[cur])+" (плюс в пользу белых)";
-  const c=$("comment");
-  if(cur===0){c.textContent="Начальная позиция. Листай ходы кнопками ◀ ▶ или нажми на ход в списке.";}
-  else{
-    const x=info[cur],L=LAB[x.kind],mv=moves[cur-1];
-    c.innerHTML="<b style='color:"+L[1]+"'>"+mv.san+" "+L[2]+"</b> — "+L[0]+(x.bestSan?". Лучше было: <b>"+x.bestSan+"</b>":"");
-  }
-  // график
-  const N=moves.length||1;let pts="";
-  for(let i=0;i<=moves.length;i++)pts+=(i/N*300).toFixed(1)+","+(70-wp(cpW[i])*0.7).toFixed(1)+" ";
-  const cx=(cur/N*300).toFixed(1);
-  $("graph").innerHTML="<polygon points='0,70 "+pts+"300,70' fill='#bbb' opacity='.55'/><line x1='0' y1='35' x2='300' y2='35' stroke='#888' stroke-width='.5'/><line x1='"+cx+"' y1='0' x2='"+cx+"' y2='70' stroke='#d9433b' stroke-width='1.5'/>";
-  // список ходов
-  let h="";
-  moves.forEach((m,i)=>{
-    const k=info[i+1].kind;
-    if(i%2===0)h+="<b>"+(i/2+1)+".</b> ";
-    h+="<span class='mv"+(i+1===cur?" cur":"")+"' data-i='"+(i+1)+"' style='border-bottom-color:"+(k==="best"||k==="good"?"transparent":LAB[k][1])+"'>"+m.san+LAB[k][2]+"</span> ";
+    const x=document.createElement("button");x.textContent="✕";x.onclick=()=>{box.classList.add("hide");res(null);};
+    box.appendChild(x);box.classList.remove("hide");
   });
-  $("moves").innerHTML=h;
 }
-function go(i){cur=Math.max(0,Math.min(moves.length,i));render();}
-$("moves").onclick=e=>{const t=e.target.closest(".mv");if(t)go(+t.dataset.i);};
-$("graph").onclick=e=>{const r=$("graph").getBoundingClientRect();go(Math.round((e.clientX-r.left)/r.width*moves.length));};
-$("first").onclick=()=>go(0);$("prev").onclick=()=>go(cur-1);
-$("next").onclick=()=>go(cur+1);$("lastb").onclick=()=>go(moves.length);
+function doMove(m,pr){
+  game.move({from:m.from,to:m.to,promotion:pr||"q"});if(window.Sound)Sound.move();
+  last={from:m.from,to:m.to};sel=null;targets=[];
+  render();
+  maybeBot();
+}
+function maybeBot(){
+  if(game.game_over()||!isBotTurn())return;
+  thinking=true;updateStatus();
+  setTimeout(()=>{
+    const m=pickMove(+$("level").value);
+    thinking=false;
+    if(m){game.move({from:m.from,to:m.to,promotion:m.promotion||"q"});if(window.Sound)Sound.move();last={from:m.from,to:m.to};}
+    render();
+  },60);
+}
+/* ---------- Бот: negamax + alpha-beta ---------- */
+function evaluate(){
+  const b=game.board();let s=0;
+  for(let r=0;r<8;r++)for(let f=0;f<8;f++){
+    const p=b[r][f];if(!p)continue;
+    let v=VAL[p.type];
+    if(p.type==="p"||p.type==="n"||p.type==="b"){v+=(7-(Math.abs(3.5-r)+Math.abs(3.5-f)))*3;}
+    s+=p.color==="w"?v:-v;
+  }
+  return game.turn()==="w"?s:-s;
+}
+function ordered(){
+  return game.moves({verbose:true}).sort((a,b)=>(b.captured?VAL[b.captured]:0)-(a.captured?VAL[a.captured]:0));
+}
+function negamax(d,a,b){
+  if(d===0)return evaluate();
+  const ms=ordered();
+  if(!ms.length)return game.in_check()?-99999-d:0;
+  let best=-Infinity;
+  for(const m of ms){
+    game.move(m);
+    const s=-negamax(d-1,-b,-a);
+    game.undo();
+    if(s>best)best=s;
+    if(best>a)a=best;
+    if(a>=b)break;
+  }
+  return best;
+}
+function pickMove(depth){
+  const ms=ordered();if(!ms.length)return null;
+  let best=-Infinity,pick=[];
+  for(const m of ms){
+    game.move(m);
+    let s=-negamax(depth-1,-Infinity,Infinity);
+    game.undo();
+    if(depth===1)s+=Math.random()*120;
+    if(s>best){best=s;pick=[m];}else if(s===best)pick.push(m);
+  }
+  return pick[Math.floor(Math.random()*pick.length)];
+}
+/* ---------- Кнопки ---------- */
+function newGame(){
+  game=new Chess();sel=null;targets=[];last=null;thinking=false;
+  flipped=$("mode").value==="bot"&&$("color").value==="b";
+  render();maybeBot();
+}
+$("new").onclick=newGame;
+$("mode").onchange=newGame;$("color").onchange=newGame;
 $("flip").onclick=()=>{flipped=!flipped;render();};
-document.addEventListener("keydown",e=>{if(!moves.length)return;if(e.key==="ArrowLeft")go(cur-1);if(e.key==="ArrowRight")go(cur+1);});
-$("go").onclick=analyze;
-
-try{
-  const saved=localStorage.getItem("lastPgn");
-  if(saved){$("pgn").value=saved;if(new URLSearchParams(location.search).get("auto")==="1")analyze();}
-}catch(e){}
+$("undo").onclick=()=>{
+  if(thinking)return;
+  game.undo();
+  if($("mode").value==="bot"&&isBotTurn())game.undo();
+  sel=null;targets=[];last=null;render();
+};
+newGame();
 </script>
 </body>
 </html>
