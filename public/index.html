@@ -54,8 +54,10 @@ input{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(
 .card{width:var(--bs);background:var(--panel);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
 a{color:var(--accent)}
 </style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
+<script src="/nav.js"></script>
 <h1>♟︎ Шахматы онлайн</h1>
 
 <div id="lobby" class="card">
@@ -70,7 +72,7 @@ a{color:var(--accent)}
   <div id="waitBox" class="hide">
     <div>Ищем соперника…</div>
     <button id="cancel" style="margin-top:8px">Отмена</button>
-    <div id="botHint" class="hide" style="margin-top:8px">Долго нет соперника? <a href="/bot.html">Сыграй с ботом</a></div>
+    <div id="botHint" class="hide" style="margin-top:8px">Долго нет соперника?<a class="navbtn" style="margin-top:8px" href="/bot.html">🤖 Сыграть с ботом</a></div>
   </div>
   <div id="onlineCount" style="color:var(--muted);font-size:14px"></div>
   <hr style="width:100%;border:0;border-top:1px solid var(--muted);opacity:.3">
@@ -188,7 +190,7 @@ function startGame(){
   const socket=io();
   const boardEl=$("board");
   let me=null,st=null,game=new Chess(),sel=null,targets=[],flipped=false,first=true;
-  let clk=null,clkAt=0;
+  let clk=null,clkAt=0,prevLen=-1;
   function fmtTime(ms){const t=Math.ceil(Math.max(0,ms)/1000);return Math.floor(t/60)+":"+String(t%60).padStart(2,"0");}
   function drawClocks(){
     if(!clk)return;
@@ -217,7 +219,7 @@ function startGame(){
 
   socket.on("connect",()=>socket.emit("join",{room,pid,token:Account.token(),tc:new URLSearchParams(location.search).get("tc")||""}));
   socket.on("you",c=>{me=c;if(first){flipped=(c==="b");first=false;}render();});
-  socket.on("state",s=>{st=s;clk=s.clock;clkAt=Date.now();game=new Chess(s.fen);sel=null;targets=[];render();});
+  socket.on("state",s=>{if(window.Sound&&prevLen>=0&&s.history.length>prevLen)Sound.move();prevLen=s.history.length;st=s;clk=s.clock;clkAt=Date.now();game=new Chess(s.fen);sel=null;targets=[];render();});
 
   function findKing(color){
     const b=game.board();
