@@ -43,8 +43,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .pbtn .pc{width:100%;height:100%;display:flex}
 .hide{display:none!important}
 </style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
+<script src="/nav.js"></script>
 <h1>♟︎ Шахматы</h1>
 <a href="/" style="color:var(--accent)">← Онлайн-игра с другом</a>
 <div class="bar">
@@ -159,7 +161,7 @@ function askPromo(color){
   });
 }
 function doMove(m,pr){
-  game.move({from:m.from,to:m.to,promotion:pr||"q"});
+  game.move({from:m.from,to:m.to,promotion:pr||"q"});if(window.Sound)Sound.move();
   last={from:m.from,to:m.to};sel=null;targets=[];
   render();
   maybeBot();
@@ -170,7 +172,7 @@ function maybeBot(){
   setTimeout(()=>{
     const m=pickMove(+$("level").value);
     thinking=false;
-    if(m){game.move({from:m.from,to:m.to,promotion:m.promotion||"q"});last={from:m.from,to:m.to};}
+    if(m){game.move({from:m.from,to:m.to,promotion:m.promotion||"q"});if(window.Sound)Sound.move();last={from:m.from,to:m.to};}
     render();
   },60);
 }
