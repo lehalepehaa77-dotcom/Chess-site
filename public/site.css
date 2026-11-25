@@ -1,0 +1,59 @@
+/* ===== Общий дизайн сайта ===== */
+body{
+  background:radial-gradient(900px 420px at 50% -140px,rgba(47,111,62,.16),transparent 70%),var(--bg);
+  letter-spacing:.005em;-webkit-font-smoothing:antialiased;
+}
+h1{font-size:24px;font-weight:800;letter-spacing:-.01em}
+a{text-underline-offset:3px}
+
+/* верхняя панель */
+nav.site{
+  align-self:stretch;margin-top:-14px;position:sticky;top:0;z-index:30;
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 14px;
+  padding:10px 14px;background:color-mix(in srgb,var(--panel) 88%,transparent);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid rgba(128,128,128,.22);
+}
+nav.site .brand{font-weight:800;font-size:18px;color:var(--fg);text-decoration:none;letter-spacing:-.01em}
+nav.site .links{display:flex;flex-wrap:wrap;gap:2px 4px}
+nav.site .links a{color:var(--muted);text-decoration:none;font-weight:600;font-size:14px;padding:5px 9px;border-radius:8px}
+nav.site .links a:hover{color:var(--fg);background:rgba(128,128,128,.14)}
+nav.site .links a.on{color:var(--accent);background:rgba(47,111,62,.14)}
+nav.site .tools{display:flex;align-items:center;gap:4px}
+nav.site .tools button{padding:4px 8px;border-radius:8px;background:transparent;border-color:transparent;font-size:16px}
+nav.site .tools button:hover{background:rgba(128,128,128,.14);box-shadow:none}
+nav.site .tools a{font-size:14px;font-weight:600;color:var(--fg);text-decoration:none;padding:5px 10px;border-radius:999px;background:rgba(128,128,128,.14);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+nav.site .tools a:hover{background:rgba(47,111,62,.18)}
+
+/* кнопки и поля */
+button,select,input,textarea{border-radius:10px;border-color:rgba(128,128,128,.45);transition:transform .08s,box-shadow .15s,background .15s,border-color .15s}
+button:hover:not(:disabled){border-color:var(--accent);box-shadow:0 2px 10px rgba(0,0,0,.12)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.5;cursor:default}
+button.primary{background:linear-gradient(180deg,#3b8c4f,#2f6f3e);border-color:#2a6338;color:#fff;font-weight:600;box-shadow:0 2px 0 rgba(0,0,0,.18)}
+button.primary:hover:not(:disabled){filter:brightness(1.08)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tab.on{box-shadow:none}
+
+/* карточки */
+.card,#status,#moves,#coach,.box,.lcard,#head,#sum,#stats,.stat,.clk,#comment,#promo{
+  border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 20px rgba(0,0,0,.05);
+}
+#status,#coach{border-left:4px solid var(--accent)}
+#coach.bad{border-left-color:#d9433b}
+.navbtn,.lcard{border-radius:12px;transition:transform .1s,border-color .15s,box-shadow .15s}
+.navbtn:hover,.lcard:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.12)}
+
+/* доска */
+#board{border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.24),0 0 0 1px rgba(0,0,0,.28)}
+.sq{-webkit-tap-highlight-color:transparent}
+.sq.hint:hover{filter:brightness(1.08)}
+.pc{width:90%;height:90%}
+.coord{opacity:.8;font-weight:800}
+.sq.l .coord{color:var(--sq-d)}
+.sq.d .coord{color:var(--sq-l)}
+.clk{font-size:20px}
+@media (max-width:520px){
+  nav.site .links a{padding:4px 7px;font-size:13px}
+  h1{font-size:21px}
+}
